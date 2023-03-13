@@ -35,26 +35,32 @@ class YammerAdapter extends Adapter
 
     bot = new YammerRealtime(options, @robot)
     bot.listen (err, data) =>
-      user_name = (reference.name for reference in data.references when reference.type is "user")
-      self_id = data.meta.current_user_id
-      data.messages.forEach (message) =>
-        if message.group_id in bot.groups_ids
-          thread_id = message.thread_id
-          sender_id = message.sender_id
-          text = message.body.plain
-          @robot.logger.debug "A message from #{user_name}: #{text}
-                               (thread_id: #{thread_id}, sender_id: #{sender_id})."
-          if self_id == sender_id && !bot.reply_self
-            me = @robot.name
-            @robot.logger.debug "Skipping a message from self."
-          else
-            user =
-              name: user_name
-              id: sender_id
-              thread_id: thread_id
-            @robot.receive new TextMessage user, text
-      @robot.logger.error "Received a error: #{err}" if err
-
+      console.log data
+      if data != null
+        user_name = (reference.name for reference in data.references when reference.type is "user")
+        self_id = data.meta.current_user_id
+        data.messages.forEach (message) =>
+          if message.group_id in bot.groups_ids
+            thread_id = message.thread_id
+            sender_id = message.sender_id
+            text = message.body.plain
+            message_id = message.id
+            console.log "message id: ", message_id
+            if message_id > Yammer.lastMessageId
+              Yammer.lastMessageId = message_id
+            @robot.logger.debug "A message from #{user_name}: #{text}
+                                (thread_id: #{thread_id}, sender_id: #{sender_id})."
+            if self_id == sender_id && !bot.reply_self
+              me = @robot.name
+              @robot.logger.debug "Skipping a message from self."
+            else
+              user =
+                name: user_name
+                id: sender_id
+                thread_id: thread_id
+              if Yammer.lastMessageId > 0
+                @robot.receive new TextMessage user, text
+        @robot.logger.error "Received a error: #{err}" if err
     @bot = bot
     @emit 'connected'
 
@@ -62,6 +68,7 @@ exports.use = (robot) ->
   new YammerAdapter robot
 
 class YammerRealtime extends EventEmitter
+  last_message_id = 0
   constructor: (options, robot) ->
     if options.access_token?
       @robot = robot
@@ -74,7 +81,8 @@ class YammerRealtime extends EventEmitter
   ## Yammer API call methods
   listen: (callback) ->
     @yammer.realtime.messages (err, data) ->
-      callback err, data.data if 'data' of data
+      if data != null
+        callback err, data
 
   send: (user, yamText) ->
     if user && user.thread_id
